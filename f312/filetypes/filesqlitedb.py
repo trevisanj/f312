@@ -1,139 +1,109 @@
-from .datafile import DataFile
-import a107
 import shutil
 import os
+from collections import OrderedDict
+import sqlite3
+import a107
 
 
-__all__ = ["FileSQLiteDB"]
+__all__ = ["FileSQLiteDB", "get_table_info"]
 
 
-class FileSQLiteDB(DataFile):
+class FileSQLiteDB(object):
     """Represents a SQLite database file.
 
     This class is not supposed to be instantialized. It serves as an ancestor for other classes
     that implement specific database schemas."""
 
-    attrs = ["classname", "filename", "tables"]
-    flag_txt = False
 
-    # (xgear info): {(table name): {(field name): [caption, description], ...}, ...}
-    #
-    #  See ftpyfant.convmol.moldb for example
-    gui_info = {}
+    # TODO cleanup Honestly, why do I need this?
+    # @property
+    # def table(self):
+    #     """Return a list of the database table names"""
+    #     return self.get_table_names()
 
-    @property
-    def tables(self):
-        """Return a list of the database table names"""
-        return self._get_table_names()
+    def __init__(self, filename):
+        self.__conn = None
 
-    def __init__(self):
-        DataFile.__init__(self)
-        self._conn = None
+        self.filename = filename
+        self.ensure_schema()
 
-    # # Overridable
-    #   ===========
+    # # You should override this
+    #   ========================
 
-    def _get_conn(self, filename):
-        return a107.get_conn(filename)
-
-    def _create_schema(self):
-        """Responsible for executing the CREATE TABLE statements
-
-        Does not actually raise. If you don't want a schema, that's fine"""
+    def _create_schema(self, cursor):
+        """Responsible for executing the CREATE TABLE statements"""
         pass
 
     def _populate(self):
-        """Responsible for that initial kick to a DB with all tables created, but empty
-
-        Does not actually raise. If you don't want to populate the database, that's fine"""
+        """Responsible for that initial kick to a DB with all tables created, but empty"""
         pass
 
-    # # Override
-    #   ========
+    # # Interface
+    #   =========
 
-    def init_default(self):
-        """Overriden to take default database and save locally
+    def execute(self, *args, **kwargs):
+        """Executes a query; wraps connection.execute().
 
-        The issue was that init_default() sets self.filename to None; however there can be no
-        SQLite database without a corresponding file (not using *memory* here)
-
-        Should not keep default file open either (as it is in the API directory and shouldn't be
-        messed by user)
+        Returns:
+            cursor
         """
-        import f312
-        if self.default_filename is None:
-            raise RuntimeError("Class '{}' has no default filename".format(self.__class__.__name__))
-        fullpath = f312.get_default_data_path(self.default_filename, class_=self.__class__)
-        self.load(fullpath)
-        name, ext = os.path.splitext(self.default_filename)
-        new = a107.new_filename(os.path.join("./", name), ext)
-        self.save_as(new)
+        conn = self.__get_conn()
+        return conn.execute(*args, **kwargs)
 
-    def _do_load(self, filename):
-        """Loading here is limited to opening a connection"""
+    def test(self, filename):
+        """Tries to run harmless SQL statement thereby checking if the database is sane."""
         self.__get_conn(filename=filename)
-        self._get_table_names()  # tests if it is really a database
+        self.get_table_names()
 
-    def _do_save_as(self, filename):
-        """Closes connection, copies DB file, and opens again pointing to new file
+    def save_as(self, filename):
+        """Closes connection, copies DB file, and opens again pointing to new file.
 
         **Note** if filename equals current filename, does nothing!
         """
         if filename != self.filename:
-            self._ensure_filename()
-            self._close_if_open()
+            self.__ensure_filename()
+            self.__close_if_open()
             shutil.copyfile(self.filename, filename)
             self.__get_conn(filename=filename)
-
-    def _close_if_open(self):
-        if self._conn_is_open():
-            self._conn.close()
-            self._conn = None
-
-    def _ensure_filename(self):
-        if self.filename is None:
-            raise RuntimeError("'filename' attribute is not set")
-
-    # # Interface
-    #   =========
 
     def commit(self):
         self.get_conn().commit()
 
     def ensure_schema(self):
         """Create file and schema if it does not exist yet."""
-        self._ensure_filename()
+        self.__ensure_filename()
         if not os.path.isfile(self.filename):
             self.create_schema()
 
     def close_if_open(self):
-        return self._close_if_open()
+        return self.__close_if_open()
 
     def delete(self):
         """Removes .sqlite file. **CAREFUL** needless say"""
-        self._ensure_filename()
-        self._close_if_open()
+        self.__ensure_filename()
+        self.__close_if_open()
         os.remove(self.filename)
 
     def create_schema(self):
         """Creates database schema"""
-        self._ensure_filename()
-        self._create_schema()
+        self.__ensure_filename()
+        self.__create_schema()
 
     def populate(self):
         """Series of INSERT statements to populate database with its initial contents"""
-        self._ensure_filename()
+        self.__ensure_filename()
         self._populate()
 
     def get_conn(self, flag_force_new=False):
-        """Returns sqlite3.Connection object with a non-default row factory.
+        """
+        Returns a "seasoned" sqlite3.Connection object.
 
         Args:
             flag_force_new: returns a new connection irrespective of one already being open.
                             Does **not** close existing open connection
 
         """
-        self._ensure_filename()
+        self.__ensure_filename()
         return self.__get_conn(flag_force_new)
 
     def get_column_names(self, tablename):
@@ -143,38 +113,43 @@ class FileSQLiteDB(DataFile):
     def get_table_info(self, tablename):
         """Returns information about fields of a specific table
 
-        Returns:  OrderedDict(("fieldname", MyDBRow), ...))
-
-        **Note** Fields "caption" and "tooltip" are added to rows using information in moldb.gui_info
-
+        Returns:  {"fieldname": row, ...}
         """
         conn = self.__get_conn()
-        ret = a107.get_table_info(conn, tablename)
+
+        return get_table_info(conn, tablename)
 
         if len(ret) == 0:
             raise RuntimeError("Cannot get info for table '{}'".format(tablename))
 
-        more = self.gui_info.get(tablename)
-        for row in ret.values():
-            caption, tooltip = None, None
-            if more:
-                info = more.get(row["name"])
-                if info:
-                    caption, tooltip = info
-            row["caption"] = caption
-            row["tooltip"] = tooltip
-
         return ret
+
+    def get_table_names(self):
+        # http://stackoverflow.com/questions/305378/list-of-tables-db-schema-dump-etc-using-the-python-sqlite3-api
+
+        conn = self.__get_conn()
+
+        return self.__get_table_names(conn)
 
     # # Internal gear
     #   =============
 
-    def _get_table_names(self):
-        return a107.get_table_names(self.__get_conn())
+    def __get_table_names(self, conn):
+        # Note: passing conn as argument is needed to avoid cyclic recursion, because
+        r = conn.execute("select name from sqlite_master where type = 'table'")
+        names = [row["name"] for row in r]
+        return names
 
-    def _conn_is_open(self):
+    def __conn_is_open(self):
         """Tests sqlite3 connection, returns T/F"""
-        return a107.conn_is_open(self._conn)
+        if self.__conn is None:
+            return False
+
+        try:
+            self.__get_table_names(self.__conn)
+            return True
+        except sqlite3.ProgrammingError as e:
+            return False
 
     def __get_conn(self, flag_force_new=False, filename=None):
         """Returns connection to database. Tries to return existing connection, unless flag_force_new
@@ -188,15 +163,55 @@ class FileSQLiteDB(DataFile):
         **Note** this is a private method because you can get a connection to any file, so it has to
                  be used in the right moment
         """
-        flag_open_new = flag_force_new or not self._conn_is_open()
+        flag_open_new = flag_force_new or not self.__conn_is_open()
 
         if flag_open_new:
             if filename is None:
                 filename = self.filename
             # funny that __get_conn() calls _get_conn() but that's it
-            conn = self._get_conn(filename)
-            self._conn = conn
+            conn = self.__get_conn_really(filename)
+            self.__conn = conn
         else:
-            conn = self._conn
+            conn = self.__conn
         return conn
+
+    def __get_conn_really(self, filename):
+        # https://stackoverflow.com/questions/1829872/how-to-read-datetime-back-from-sqlite-as-a-datetime-instead-of-string-in-python
+        conn = sqlite3.connect(filename, detect_types=sqlite3.PARSE_DECLTYPES)
+        # I think this will give rows with both numeric and string indexes
+        conn.row_factory = sqlite3.Row
+
+        return conn
+
+    def __close_if_open(self):
+        if self.__conn_is_open():
+            self.__conn.close()
+            self.__conn = None
+
+    def __ensure_filename(self):
+        if self.filename is None:
+            raise RuntimeError("'filename' attribute is not set")
+
+    def __create_schema(self):
+        conn = self.get_conn()
+        self._create_schema(conn.cursor())
+        conn.commit()
+
+
+def get_table_info(conn, tablename):
+    """
+    Returns information about fields of a specific table
+
+    Args:
+        conn: sqlite3 Connection object
+        tablename: string
+
+    Returns:
+        {"fieldname": row, ...}
+    """
+
+    r = conn.execute("pragma table_info('{}')".format(tablename))
+    ret = OrderedDict(((row["name"], row) for row in r))
+    return ret
+
 
