@@ -14,13 +14,6 @@ class FileSQLiteDB(object):
     This class is not supposed to be instantialized. It serves as an ancestor for other classes
     that implement specific database schemas."""
 
-
-    # TODO cleanup Honestly, why do I need this?
-    # @property
-    # def table(self):
-    #     """Return a list of the database table names"""
-    #     return self.get_table_names()
-
     def __init__(self, filename):
         self.__conn = None
 
