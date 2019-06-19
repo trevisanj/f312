@@ -30,12 +30,10 @@ class Keystore(FileSQLiteDB):
         cursor = conn.execute("select value from data where key = ?", (key,))
         __res = cursor.fetchone()
         if __res is None:
-            print(f"KEYSTORE VAI RAISAR para '{key}")
             raise KeyError(f"Key not found: '{key}'")
 
         _res = __res[0]
         res = self._unpickle(_res)
-        print(f"KEYSTORE RETORNANDO '{res}' PARA '{key}'")
         return res
 
     def __setitem__(self, key, value):
