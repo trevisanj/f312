@@ -28,7 +28,7 @@ setup(
     name=PACKAGE_NAME,
     packages=find_packages(),
     include_package_data=True,
-    version='19.4.11.0',
+    version='19.6.27.0',
     license='GNU GPLv3',
     platforms='any',
     description='Framework to implement file readers/writers',
