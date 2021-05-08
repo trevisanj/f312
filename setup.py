@@ -36,7 +36,7 @@ setup(
     author_email='juliotrevisan@gmail.com',
     url='https://github.com/trevisanj/f312',
     keywords= [],
-    install_requires=["a107"],
+    install_requires=[],
     scripts=scripts
 )
 
