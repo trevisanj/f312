@@ -7,3 +7,5 @@ want to publish APIs that implement layers over well established resources (in t
 different components don't go well together, as sqlite files do not have this concept of save/load right? I find myself
 now just implementing my new version(s) of a FileSQLite (or whatever) for my most serious packages. Again it is OK to 
 wrap established resources/packages/classes; I just do not think that it justifies a standalone project.
+
+**20220105** I now use a107.FileSQLite
