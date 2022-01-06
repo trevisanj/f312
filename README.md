@@ -9,3 +9,6 @@ now just implementing my new version(s) of a FileSQLite (or whatever) for my mos
 wrap established resources/packages/classes; I just do not think that it justifies a standalone project.
 
 **20220105** I now use a107.FileSQLite
+
+**20220106** I am using .py files in nekkhamma, but not subclassing FilePy from this package. This seems to be unnecessary bag ...
+Or maybe just as an inspiration, alright
